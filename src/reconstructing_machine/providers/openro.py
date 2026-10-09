@@ -11,24 +11,33 @@ import json
 from os import environ
 
 
-def respond(messages=None, instructions=None, **kwargs):
-    """ All parameters should be in kwargs, but they are optional
+def respond(messages, instructions, **kwargs):
     """
-    api_key = environ.get("OPENAI_API_KEY", '')
-    default_model = environ.get("OPENAI_DEFAULT_MODEL", 'gpt-5.4')
-    api_base = environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
+    """
+    api_key = environ.get("OPENRO_API_KEY")
+    api_base = environ.get("OPENRO_API_BASE", "https://openrouter.ai/api/v1")
+    default_model = environ.get("OPENRO_DEFAULT_MODEL", "openai/gpt-6-luna")
 
     instruction = kwargs.get('system_instruction', instructions)
+    first_message = [dict(role='system', content=instruction)] if instruction else []
+
+    # add contents and user text to the first (instruction) message
+    first_message.extend(messages)
+    instruction_and_contents = first_message
 
     # Define the payload
     payload = {
         "model":            kwargs.get("model", default_model),
-        "instructions":     instruction,
-        "input":            messages,
-        "max_output_tokens": kwargs.get("max_tokens", 64000),
+        "messages":         instruction_and_contents,
+        "max_tokens":       kwargs.get("max_tokens", 128000),
+        "temperature":      kwargs.get("temperature", 1.0),
+        "reasoning_effort": kwargs.get("reasoning_effort", "high"),
+        "response_format": {
+            "type": "text"
+        },
+        "stream": False,
         "reasoning": {
-            "effort": "xhigh",
-            "summary": "detailed"
+          "enabled": True
         }
     }
 
@@ -39,30 +48,25 @@ def respond(messages=None, instructions=None, **kwargs):
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
-        "User-Agent": "Name-of-the-Machine"
+        "User-Agent": "Reconstructing-Machine"
     }
 
     # Create the Request object
     req = urllib.request.Request(
-        f'{api_base}/responses',
+        f'{api_base}/chat/completions',
         data=data_bytes,
         headers=headers,
         method="POST")
 
     try:
         # Execute the request
-        with urllib.request.urlopen(req, timeout=300) as response:
+        with urllib.request.urlopen(req, timeout=3000) as response:
             response_data = response.read().decode('utf-8')
             output = json.loads(response_data)
-            text = ''
-            thoughts = ''
-            for part in output['output']:
-                if part['type'] == 'message':
-                    for chunk in part['content']:
-                        text += chunk['text']
-                elif part['type'] == 'reasoning':
-                    for chunk in part['summary']:
-                        thoughts += chunk['text']
+            message = output['choices'][0]['message']
+            text = message.get('content', '')
+            thoughts = message.get('reasoning', '')
+
         return thoughts, text
 
     except urllib.error.HTTPError as e:
@@ -78,5 +82,5 @@ def respond(messages=None, instructions=None, **kwargs):
         return '', ''
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     ...
